@@ -63,9 +63,10 @@ async function loadAutosyncJobs() {
   }
 }
 
-function computeNextCheck(lastCheck) {
-  if (!lastCheck || currentSyncSchedule === "0") return "—";
-  const interval = SCHEDULE_INTERVALS[currentSyncSchedule];
+function computeNextCheck(lastCheck, jobSchedule) {
+  const scheduleKey = jobSchedule || currentSyncSchedule;
+  if (!lastCheck || scheduleKey === "0") return "—";
+  const interval = SCHEDULE_INTERVALS[scheduleKey];
   if (!interval) return "—";
   const lastMs = new Date(lastCheck + "Z").getTime();
   const nextMs = lastMs + interval * 1000;
@@ -88,7 +89,7 @@ function renderJobs(jobs) {
   }
   let html =
     '<table class="user-table" style="table-layout:auto"><thead><tr>' +
-    "<th>Title</th><th>Last Check</th><th>Re-Check at</th><th>Last New Found</th><th>Episodes</th>" +
+    "<th>Title</th><th>Schedule</th><th>Last Check</th><th>Re-Check at</th><th>Last New Found</th><th>Episodes</th>" +
     "<th>Download Path</th><th>Status</th><th>Added By</th><th>Actions</th>" +
     "</tr></thead><tbody>";
   for (const job of jobs) {
@@ -97,7 +98,8 @@ function renderJobs(jobs) {
       : "queue-status-queued";
     const statusLabel = job.enabled ? "Enabled" : "Disabled";
     const lastCheck = job.last_check ? formatDate(job.last_check) : "—";
-    const nextCheck = job.enabled ? computeNextCheck(job.last_check) : "—";
+    const scheduleLabel = job.schedule ? SCHEDULE_LABELS[job.schedule] || job.schedule : "Default";
+    const nextCheck = job.enabled ? computeNextCheck(job.last_check, job.schedule) : "—";
     const lastNew = job.last_new_found ? formatDate(job.last_new_found) : "—";
     let dlPath = "Default";
     if (job.custom_path_id) {
@@ -111,6 +113,9 @@ function renderJobs(jobs) {
       esc(job.series_url) +
       '">' +
       esc(job.title) +
+      "</td>" +
+      "<td>" +
+      scheduleLabel +
       "</td>" +
       "<td>" +
       lastCheck +
@@ -256,6 +261,7 @@ async function openEditModal(id) {
 
     document.getElementById("editProvider").value = job.provider || "VOE";
     document.getElementById("editEnabled").value = job.enabled ? "1" : "0";
+    document.getElementById("editSchedule").value = job.schedule || "";
 
     // Populate path dropdown
     const pathSelect = document.getElementById("editPath");
@@ -282,12 +288,14 @@ function closeEditModal() {
 async function saveEdit() {
   const id = document.getElementById("editJobId").value;
   const pathVal = document.getElementById("editPath").value;
-  const body = {
-    language: document.getElementById("editLanguage").value,
-    provider: document.getElementById("editProvider").value,
-    enabled: parseInt(document.getElementById("editEnabled").value),
-    custom_path_id: pathVal ? parseInt(pathVal) : null,
-  };
+    const scheduleVal = document.getElementById("editSchedule").value;
+    const body = {
+      language: document.getElementById("editLanguage").value,
+      provider: document.getElementById("editProvider").value,
+      enabled: parseInt(document.getElementById("editEnabled").value),
+      custom_path_id: pathVal ? parseInt(pathVal) : null,
+      schedule: scheduleVal || null,
+    };
   try {
     const res = await fetch("/api/autosync/" + id, {
       method: "PUT",

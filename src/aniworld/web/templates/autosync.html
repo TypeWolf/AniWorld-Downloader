@@ -60,13 +60,30 @@ endblock %} {% block content %}
         <option value="">Default</option>
       </select>
     </div>
-    <div class="settings-row" style="margin-bottom: 18px">
+    <div class="settings-row" style="margin-bottom: 12px">
       <label style="color: #9ca3af; font-size: 0.85rem; min-width: 80px"
         >Status</label
       >
       <select id="editEnabled" class="sync-select">
         <option value="1">Enabled</option>
         <option value="0">Disabled</option>
+      </select>
+    </div>
+    <div class="settings-row" style="margin-bottom: 18px">
+      <label style="color: #9ca3af; font-size: 0.85rem; min-width: 80px"
+        >Schedule</label
+      >
+      <select id="editSchedule" class="sync-select">
+        <option value="">Default (Global)</option>
+        <option value="1min">1 min (Debug)</option>
+        <option value="30min">30 min</option>
+        <option value="1h">1 hour</option>
+        <option value="2h">2 hours</option>
+        <option value="4h">4 hours</option>
+        <option value="8h">8 hours</option>
+        <option value="12h">12 hours</option>
+        <option value="16h">16 hours</option>
+        <option value="24h">24 hours</option>
       </select>
     </div>
     <div style="display: flex; justify-content: flex-end; gap: 10px">

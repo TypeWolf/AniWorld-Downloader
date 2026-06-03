@@ -373,20 +373,30 @@ def _run_autosync_for_job(job):
                 target_lang, target_lang.lower().replace(" ", "-")
             )
 
-            raw = os.environ.get("ANIWORLD_DOWNLOAD_PATH", "")
-            if raw:
-                dl_base = Path(raw).expanduser()
-                if not dl_base.is_absolute():
-                    dl_base = Path.home() / dl_base
+            dl_raw = os.environ.get("ANIWORLD_DOWNLOAD_PATH", "")
+            if dl_raw:
+                dl_base = Path(dl_raw).expanduser()
             else:
                 dl_base = Path.home() / "Downloads"
 
             scan_roots = [dl_base]
+
+            sync_raw = os.environ.get("ANIWORLD_SYNC_PATH", "")
+            if sync_raw:
+                sync_base = Path(sync_raw).expanduser()
+                if not sync_base.is_absolute():
+                    sync_base = Path.home() / sync_base
+                
+                if sync_base not in scan_roots:
+                    scan_roots.append(sync_base)
+
             for cp in get_custom_paths():
                 cp_path = Path(cp["path"]).expanduser()
                 if not cp_path.is_absolute():
                     cp_path = Path.home() / cp_path
-                scan_roots.append(cp_path)
+                
+                if cp_path not in scan_roots:
+                    scan_roots.append(cp_path)
 
             # Build set of downloaded (season, episode) on disk
             downloaded_eps = set()
@@ -503,16 +513,16 @@ def _autosync_worker():
 
     while True:
         try:
-            schedule_key = os.environ.get("ANIWORLD_SYNC_SCHEDULE", "0")
-            interval = SYNC_SCHEDULE_MAP.get(schedule_key, 0)
-            if not interval:
-                time.sleep(10)
-                continue
-
+            global_schedule_key = os.environ.get("ANIWORLD_SYNC_SCHEDULE", "0")
             now = datetime.utcnow()
             jobs = get_autosync_jobs()
             for job in jobs:
                 if not job.get("enabled"):
+                    continue
+                # Per-job schedule or global fallback
+                schedule_key = job.get("schedule") or global_schedule_key
+                interval = SYNC_SCHEDULE_MAP.get(schedule_key, 0)
+                if not interval:
                     continue
                 # Per-job check: only run if enough time has elapsed
                 last_check = job.get("last_check")
@@ -837,16 +847,16 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
             lang_sep = os.environ.get("ANIWORLD_LANG_SEPARATION", "0") == "1"
             lang_folders = ["german-dub", "english-sub", "german-sub", "english-dub"]
 
-            raw = os.environ.get("ANIWORLD_DOWNLOAD_PATH", "")
+            raw = os.environ.get("ANIWORLD_SYNC_PATH", "")
             if raw:
-                dl_base = Path(raw).expanduser()
-                if not dl_base.is_absolute():
-                    dl_base = Path.home() / dl_base
+                sync_base = Path(raw).expanduser()
+                if not sync_base.is_absolute():
+                    sync_base = Path.home() / sync_base
             else:
-                dl_base = Path.home() / "Downloads"
+                sync_base = Path.home() / "Downloads"
 
             # Collect all scan roots: default + custom paths
-            scan_roots = [dl_base]
+            scan_roots = [sync_base]
             for cp in get_custom_paths():
                 cp_path = Path(cp["path"]).expanduser()
                 if not cp_path.is_absolute():
@@ -1289,6 +1299,8 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
         data = request.get_json(silent=True) or {}
         if "download_path" in data:
             os.environ["ANIWORLD_DOWNLOAD_PATH"] = str(data["download_path"]).strip()
+        if "sync_path" in data:
+            os.environ["ANIWORLD_SYNC_PATH"] = str(data["sync_path"]).strip()
         if "lang_separation" in data:
             os.environ["ANIWORLD_LANG_SEPARATION"] = (
                 "1" if data["lang_separation"] else "0"
@@ -1450,8 +1462,12 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
         if not is_admin and job.get("added_by") != username:
             return jsonify({"error": "Not authorized to edit this job"}), 403
         data = request.get_json(silent=True) or {}
-        allowed = {"language", "provider", "enabled", "custom_path_id"}
+        allowed = {"language", "provider", "enabled", "custom_path_id", "schedule"}
         filtered = {k: v for k, v in data.items() if k in allowed}
+        if "schedule" in data:
+            sched = str(data["schedule"])
+            if sched and sched != "" and sched not in SYNC_SCHEDULE_MAP:
+                return jsonify({"error": f"Invalid schedule: {sched}"}), 400
         update_autosync_job(job_id, **filtered)
         return jsonify({"ok": True})
 
