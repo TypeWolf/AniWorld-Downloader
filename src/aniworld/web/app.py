@@ -423,16 +423,16 @@ def _autosync_worker():
 
     while True:
         try:
-            schedule_key = os.environ.get("ANIWORLD_SYNC_SCHEDULE", "0")
-            interval = SYNC_SCHEDULE_MAP.get(schedule_key, 0)
-            if not interval:
-                time.sleep(10)
-                continue
-
+            global_schedule_key = os.environ.get("ANIWORLD_SYNC_SCHEDULE", "0")
             now = datetime.utcnow()
             jobs = get_autosync_jobs()
             for job in jobs:
                 if not job.get("enabled"):
+                    continue
+                # Per-job schedule or global fallback
+                schedule_key = job.get("schedule") or global_schedule_key
+                interval = SYNC_SCHEDULE_MAP.get(schedule_key, 0)
+                if not interval:
                     continue
                 # Per-job check: only run if enough time has elapsed
                 last_check = job.get("last_check")
@@ -1203,8 +1203,12 @@ def create_app(auth_enabled=False, sso_enabled=False, force_sso=False):
         if not is_admin and job.get("added_by") != username:
             return jsonify({"error": "Not authorized to edit this job"}), 403
         data = request.get_json(silent=True) or {}
-        allowed = {"language", "provider", "enabled", "custom_path_id"}
+        allowed = {"language", "provider", "enabled", "custom_path_id", "schedule"}
         filtered = {k: v for k, v in data.items() if k in allowed}
+        if "schedule" in data:
+            sched = str(data["schedule"])
+            if sched and sched != "" and sched not in SYNC_SCHEDULE_MAP:
+                return jsonify({"error": f"Invalid schedule: {sched}"}), 400
         update_autosync_job(job_id, **filtered)
         return jsonify({"ok": True})
 

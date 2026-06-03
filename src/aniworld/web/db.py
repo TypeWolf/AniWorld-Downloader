@@ -597,6 +597,7 @@ CREATE TABLE IF NOT EXISTS autosync_jobs (
     language TEXT NOT NULL DEFAULT 'German Dub',
     provider TEXT NOT NULL DEFAULT 'VOE',
     custom_path_id INTEGER,
+    schedule TEXT DEFAULT NULL,
     enabled INTEGER NOT NULL DEFAULT 1,
     added_by TEXT,
     last_check TEXT,
@@ -628,6 +629,12 @@ def init_autosync_db():
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_autosync_series_url "
                 "ON autosync_jobs (series_url)"
             )
+
+        # Add schedule column (migration)
+        try:
+            conn.execute("ALTER TABLE autosync_jobs ADD COLUMN schedule TEXT")
+        except sqlite3.OperationalError:
+            pass  # already exists
         conn.commit()
     finally:
         conn.close()
@@ -700,6 +707,7 @@ def update_autosync_job(job_id, **fields):
         "language",
         "provider",
         "custom_path_id",
+        "schedule",
         "enabled",
         "last_check",
         "last_new_found",
